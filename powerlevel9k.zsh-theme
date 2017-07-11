@@ -1389,6 +1389,18 @@ build_left_prompt() {
   left_prompt_end
 }
 
+build_left_prompt_1() {
+  local POWERLEVEL9K_LEFT_PROMPT_ELEMENTS
+  POWERLEVEL9K_LEFT_PROMPT_ELEMENTS=("${POWERLEVEL9K_LEFT_PROMPT_1_ELEMENTS[@]}")
+  build_left_prompt
+}
+
+build_left_prompt_2() {
+  local POWERLEVEL9K_LEFT_PROMPT_ELEMENTS
+  POWERLEVEL9K_LEFT_PROMPT_ELEMENTS=("${POWERLEVEL9K_LEFT_PROMPT_2_ELEMENTS[@]}")
+  build_left_prompt
+}
+
 # Right prompt
 build_right_prompt() {
   local index=1
@@ -1422,34 +1434,50 @@ powerlevel9k_prepare_prompts() {
   # Reset start time
   _P9K_TIMER_START=0x7FFFFFFF
 
-  if [[ "$POWERLEVEL9K_PROMPT_ON_NEWLINE" == true ]]; then
-    PROMPT='$(print_icon 'MULTILINE_FIRST_PROMPT_PREFIX')%f%b%k$(build_left_prompt)
-$(print_icon 'MULTILINE_LAST_PROMPT_PREFIX')'
-    if [[ "$POWERLEVEL9K_RPROMPT_ON_NEWLINE" != true ]]; then
-      # The right prompt should be on the same line as the first line of the left
-      # prompt. To do so, there is just a quite ugly workaround: Before zsh draws
-      # the RPROMPT, we advise it, to go one line up. At the end of RPROMPT, we
-      # advise it to go one line down. See:
-      # http://superuser.com/questions/357107/zsh-right-justify-in-ps1
-      local LC_ALL="" LC_CTYPE="en_US.UTF-8" # Set the right locale to protect special characters
-      RPROMPT_PREFIX='%{'$'\e[1A''%}' # one line up
-      RPROMPT_SUFFIX='%{'$'\e[1B''%}' # one line down
-    else
-      RPROMPT_PREFIX=''
-      RPROMPT_SUFFIX=''
-    fi
+NEWLINE='
+'
+
+  # Build the first line left prompt
+  local LEFT_PROMPT_1='%f%b%k$(build_left_prompt_1)'
+
+  # Build the second line left prompt, if there are any elements in it
+  local LEFT_PROMPT_2=''
+  if [[ ${#POWERLEVEL9K_LEFT_PROMPT_2_ELEMENTS[@]} -gt 0 ]]; then
+    LEFT_PROMPT_2='%f%b%k$(build_left_prompt_2)'
+  fi
+
+  # Put together the whole left prompt.
+  # POWERLEVEL9K_LEFT_PROMPT_2_ELEMENTS might be empty but defined, which means
+  # the prompt should be on a new line. This is why we check for 'defined'
+  # here, but array length just above.
+  if defined POWERLEVEL9K_LEFT_PROMPT_2_ELEMENTS; then
+    local LEFT_PROMPT_1_PREFIX='$(print_icon 'MULTILINE_FIRST_PROMPT_PREFIX')'
+    local LEFT_PROMPT_2_PREFIX='$(print_icon 'MULTILINE_SECOND_PROMPT_PREFIX')'
+    PROMPT="$LEFT_PROMPT_1_PREFIX$LEFT_PROMPT_1$NEWLINE$LEFT_PROMPT_2_PREFIX$LEFT_PROMPT_2"
   else
-    PROMPT='%f%b%k$(build_left_prompt)'
+    PROMPT="$LEFT_PROMPT_1"
+  fi
+  [[ $POWERLEVEL9K_PROMPT_ADD_NEWLINE == true ]] && PROMPT="$NEWLINE$PROMPT"
+
+  # Build right prompt
+  local RIGHT_PROMPT='%f%b%k$(build_right_prompt)%{$reset_color%}'
+  if [[ "$POWERLEVEL9K_RPROMPT_ON_NEWLINE" != true ]]; then
+    # The right prompt should be on the same line as the first line of the left
+    # prompt. To do so, there is just a quite ugly workaround: Before zsh draws
+    # the RPROMPT, we advise it, to go one line up. At the end of RPROMPT, we
+    # advise it to go one line down. See:
+    # http://superuser.com/questions/357107/zsh-right-justify-in-ps1
+    local LC_ALL="" LC_CTYPE="en_US.UTF-8" # Set the right locale to protect special characters
+    RPROMPT_PREFIX='%{'$'\e[1A''%}' # one line up
+    RPROMPT_SUFFIX='%{'$'\e[1B''%}' # one line down
+  else
     RPROMPT_PREFIX=''
     RPROMPT_SUFFIX=''
   fi
 
   if [[ "$POWERLEVEL9K_DISABLE_RPROMPT" != true ]]; then
-    RPROMPT='$RPROMPT_PREFIX%f%b%k$(build_right_prompt)%{$reset_color%}$RPROMPT_SUFFIX'
+    RPROMPT='$RPROMPT_PREFIX'"$RIGHT_PROMPT"'$RPROMPT_SUFFIX'
   fi
-NEWLINE='
-'
-  [[ $POWERLEVEL9K_PROMPT_ADD_NEWLINE == true ]] && PROMPT="$NEWLINE$PROMPT"
 }
 
 prompt_powerlevel9k_setup() {
@@ -1490,7 +1518,20 @@ prompt_powerlevel9k_setup() {
       print -P "\t%F{red}WARNING!%f %F{blue}export LANG=\"en_US.UTF-8\"%f at the top of your \~\/.zshrc is sufficient."
   fi
 
-  defined POWERLEVEL9K_LEFT_PROMPT_ELEMENTS || POWERLEVEL9K_LEFT_PROMPT_ELEMENTS=(context dir rbenv vcs)
+  # If the single line prompt variable is defined then set up multi line variables to replicate it
+  if defined POWERLEVEL9K_LEFT_PROMPT_ELEMENTS; then
+    POWERLEVEL9K_LEFT_PROMPT_1_ELEMENTS=("${POWERLEVEL9K_LEFT_PROMPT_ELEMENTS[@]}")
+    # If the user wants the prompt on a new line, set the second line, otherwise make sure it's undefined
+    if [[ $POWERLEVEL9K_PROMPT_ON_NEWLINE == true ]]; then
+      POWERLEVEL9K_LEFT_PROMPT_2_ELEMENTS=
+    else
+      unset POWERLEVEL9K_LEFT_PROMPT_2_ELEMENTS
+    fi
+  else
+    defined POWERLEVEL9K_LEFT_PROMPT_1_ELEMENTS || POWERLEVEL9K_LEFT_PROMPT_1_ELEMENTS=(context dir rbenv vcs)
+    # defined POWERLEVEL9K_LEFT_PROMPT_2_ELEMENTS || POWERLEVEL9K_LEFT_PROMPT_2_ELEMENTS=
+  fi
+
   defined POWERLEVEL9K_RIGHT_PROMPT_ELEMENTS || POWERLEVEL9K_RIGHT_PROMPT_ELEMENTS=(status root_indicator background_jobs history time)
 
   # Display a warning if deprecated segments are in use.
